@@ -9,11 +9,13 @@ from tkinter import ttk, messagebox, filedialog
 
 from persistencia import preparar, autenticar, cargar
 from configuracion import BASE, ADJUNTOS
+from ventana_archivo import abrir_archivo
+from archivo import archivar
 
 from servicios import (
     registrar, actualizar, eliminar, buscar, ordenar,
     seguimiento, resumen, exportar,
-    ESTADOS, REVISIONES, TIPOS, AREAS, PRIORIDADES
+    ESTADOS, ESTADOS_GESTION, REVISIONES, TIPOS, AREAS, PRIORIDADES
 )
 
 
@@ -149,8 +151,10 @@ class Ventana:
             ("Ver documento", self.ver_documento),
             ("Eliminar", self.borrar),
             ("Seguimiento", self.derivar),
+            ("Archivar expediente", self.archivar_expediente),
             ("Resumen", self.ver_resumen),
-            ("Exportar CSV", self.exportar_csv)
+            ("Exportar CSV", self.exportar_csv),
+            ("Archivo institucional", lambda: abrir_archivo(self.raiz))
         ]
 
         for nombre, funcion in acciones:
@@ -262,7 +266,7 @@ class Ventana:
             ("area_destino", "Área destino", AREAS),
             ("responsable", "Responsable", None),
             ("prioridad", "Prioridad", PRIORIDADES),
-            ("estado", "Estado del trámite", ESTADOS),
+            ("estado", "Estado del trámite", ESTADOS_GESTION),
             ("revision", "Estado de revisión", REVISIONES),
             ("observaciones", "Observaciones", None)
         ]
@@ -829,6 +833,36 @@ class Ventana:
         except ValueError as error:
             messagebox.showerror("Error", str(error))
 
+    def archivar_expediente(self):
+        if not self.codigo:
+            messagebox.showwarning("Archivo institucional", "Seleccione un expediente.")
+            return
+
+        confirmar = messagebox.askyesno(
+            "Confirmar archivo",
+            f"?Desea archivar el expediente {self.codigo}?\n\n"
+            "Solo se pueden archivar expedientes finalizados."
+        )
+
+        if not confirmar:
+            return
+
+        responsable = self.cuenta.get("usuario", "") if isinstance(self.cuenta, dict) else ""
+
+        try:
+            codigo_archivado = self.codigo
+            archivar(codigo_archivado, responsable)
+            self.refrescar()
+            self.mensaje.set(
+                f"Expediente {codigo_archivado} archivado correctamente."
+            )
+            messagebox.showinfo(
+                "Archivo institucional",
+                f"El expediente {codigo_archivado} se archivo correctamente."
+            )
+        except ValueError as error:
+            messagebox.showerror("No se pudo archivar", str(error))
+
     def filtrar_registros(self, registros):
         estado = self.filtros["estado"].get()
         area = self.filtros["area"].get()
@@ -1120,3 +1154,4 @@ def iniciar():
 
 if __name__ == "__main__":
     iniciar()
+
