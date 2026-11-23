@@ -1,10 +1,10 @@
-
 import os
 import shutil
 import uuid
 import tkinter as tk
 
 from pathlib import Path
+from datetime import datetime
 from tkinter import ttk, messagebox, filedialog
 
 from persistencia import preparar, autenticar, cargar
@@ -17,6 +17,16 @@ from servicios import (
 )
 
 
+VERDE_OSCURO = "#174D38"
+VERDE = "#347A59"
+VERDE_CLARO = "#DCEBDD"
+CREMA = "#F5F3E9"
+BLANCO = "#FFFFFF"
+TEXTO = "#263B30"
+GRIS = "#64756B"
+DORADO = "#C6A45C"
+
+
 class Ventana:
 
     def __init__(self, raiz, cuenta):
@@ -24,91 +34,224 @@ class Ventana:
         self.cuenta = cuenta
         self.codigo = None
         self.campos = {}
+        self.filtros = {}
+        self.orden_campo = "fecha"
+        self.orden_inverso = True
 
         raiz.title("Mesa de Partes Digital | Santa Rita de Casia")
-        raiz.geometry("1240x750")
-        raiz.minsize(1000, 620)
-        raiz.configure(bg="#eef2f7")
+        raiz.geometry("1450x850")
+        raiz.minsize(1150, 700)
+        raiz.configure(bg=CREMA)
 
+        self.configurar_estilos()
+        self.crear_encabezado()
+        self.crear_barra_acciones()
+        self.crear_indicadores()
+        self.crear_contenido()
+        self.crear_barra_estado()
+
+        self.refrescar()
+
+    def configurar_estilos(self):
         estilo = ttk.Style()
         estilo.theme_use("clam")
+
         estilo.configure(
             "Treeview",
-            rowheight=27,
+            background=BLANCO,
+            fieldbackground=BLANCO,
+            foreground=TEXTO,
+            rowheight=32,
             font=("Segoe UI", 9)
         )
+
         estilo.configure(
             "Treeview.Heading",
-            font=("Segoe UI", 9, "bold")
+            background=VERDE_OSCURO,
+            foreground=BLANCO,
+            font=("Segoe UI", 9, "bold"),
+            padding=8
         )
 
-        cab = tk.Frame(raiz, bg="#102a43", height=72)
+        estilo.map(
+            "Treeview",
+            background=[("selected", VERDE)],
+            foreground=[("selected", BLANCO)]
+        )
+
+        estilo.configure(
+            "TCombobox",
+            padding=5,
+            font=("Segoe UI", 9)
+        )
+
+        estilo.configure(
+            "TEntry",
+            padding=6,
+            font=("Segoe UI", 9)
+        )
+
+        estilo.configure(
+            "TButton",
+            padding=(10, 7),
+            font=("Segoe UI", 9)
+        )
+
+        estilo.map(
+            "TButton",
+            background=[("active", VERDE_CLARO)]
+        )
+
+    def crear_encabezado(self):
+        cab = tk.Frame(
+            self.raiz,
+            bg=VERDE_OSCURO,
+            height=82
+        )
         cab.pack(fill="x")
+        cab.pack_propagate(False)
+
+        identidad = tk.Frame(cab, bg=VERDE_OSCURO)
+        identidad.pack(side="left", padx=24, pady=12)
 
         tk.Label(
-            cab,
-            text="MESA DE PARTES DIGITAL",
-            bg="#102a43",
-            fg="white",
+            identidad,
+            text="SANTA RITA DE CASIA",
+            bg=VERDE_OSCURO,
+            fg=BLANCO,
             font=("Segoe UI", 18, "bold")
-        ).pack(side="left", padx=22, pady=18)
+        ).pack(anchor="w")
+
+        tk.Label(
+            identidad,
+            text="MESA DE PARTES DIGITAL",
+            bg=VERDE_OSCURO,
+            fg="#DCEBDD",
+            font=("Segoe UI", 9)
+        ).pack(anchor="w")
 
         tk.Label(
             cab,
-            text=f"{cuenta['rol']} | {cuenta['usuario']}",
-            bg="#102a43",
-            fg="#d9e2ec"
-        ).pack(side="right", padx=20)
+            text=f"{self.cuenta['rol']}  |  {self.cuenta['usuario']}",
+            bg=VERDE_OSCURO,
+            fg=BLANCO,
+            font=("Segoe UI", 10, "bold")
+        ).pack(side="right", padx=24)
 
-        acciones = tk.Frame(raiz, bg="#d9e2ec")
-        acciones.pack(fill="x")
+    def crear_barra_acciones(self):
+        barra = tk.Frame(self.raiz, bg=VERDE_CLARO)
+        barra.pack(fill="x")
 
-        botones = [
-            ("Nuevo", self.limpiar),
+        acciones = [
+            ("＋ Nuevo", self.limpiar),
             ("Guardar", self.guardar),
-            ("Editar expediente", self.editar),
+            ("Editar", self.editar),
             ("Ver documento", self.ver_documento),
             ("Eliminar", self.borrar),
-            ("Derivar / seguimiento", self.derivar),
+            ("Seguimiento", self.derivar),
             ("Resumen", self.ver_resumen),
             ("Exportar CSV", self.exportar_csv)
         ]
 
-        for nombre, funcion in botones:
+        for nombre, funcion in acciones:
             ttk.Button(
-                acciones,
+                barra,
                 text=nombre,
                 command=funcion
-            ).pack(side="left", padx=4, pady=7)
+            ).pack(side="left", padx=5, pady=8)
 
-        cuerpo = tk.Frame(raiz, bg="#eef2f7")
+    def crear_indicadores(self):
+        contenedor = tk.Frame(self.raiz, bg=CREMA)
+        contenedor.pack(fill="x", padx=14, pady=(12, 5))
+
+        definiciones = [
+            ("Total de expedientes", "total", VERDE_OSCURO),
+            ("Recibidos", "Recibido", VERDE),
+            ("En revisión", "En revisión", "#A77D32"),
+            ("Observados", "Observado", "#B66B42"),
+            ("Finalizados", "Finalizado", "#527A69")
+        ]
+
+        self.indicadores = {}
+
+        for titulo, clave, color in definiciones:
+            tarjeta = tk.Frame(
+                contenedor,
+                bg=BLANCO,
+                highlightbackground="#D8E2D9",
+                highlightthickness=1,
+                padx=14,
+                pady=9
+            )
+            tarjeta.pack(
+                side="left",
+                fill="both",
+                expand=True,
+                padx=5
+            )
+
+            tk.Label(
+                tarjeta,
+                text=titulo,
+                bg=BLANCO,
+                fg=GRIS,
+                font=("Segoe UI", 9)
+            ).pack(anchor="w")
+
+            valor = tk.Label(
+                tarjeta,
+                text="0",
+                bg=BLANCO,
+                fg=color,
+                font=("Segoe UI", 21, "bold")
+            )
+            valor.pack(anchor="w", pady=(2, 0))
+
+            self.indicadores[clave] = valor
+
+    def crear_contenido(self):
+        cuerpo = tk.Frame(self.raiz, bg=CREMA)
         cuerpo.pack(
             fill="both",
             expand=True,
-            padx=12,
+            padx=14,
+            pady=10
+        )
+
+        izquierda = tk.Frame(
+            cuerpo,
+            bg=BLANCO,
+            width=365,
+            padx=14,
             pady=12
         )
-
-        izq = tk.Frame(
-            cuerpo,
-            bg="white",
-            padx=12,
-            pady=12,
-            width=350
+        izquierda.pack(
+            side="left",
+            fill="y",
+            padx=(0, 12)
         )
-        izq.pack(side="left", fill="y", padx=(0, 12))
-        izq.pack_propagate(False)
+        izquierda.pack_propagate(False)
 
         tk.Label(
-            izq,
+            izquierda,
             text="DATOS DEL EXPEDIENTE",
-            bg="white",
-            fg="#102a43",
-            font=("Segoe UI", 11, "bold")
-        ).pack(anchor="w", pady=(0, 8))
+            bg=BLANCO,
+            fg=VERDE_OSCURO,
+            font=("Segoe UI", 12, "bold")
+        ).pack(anchor="w", pady=(0, 3))
 
-        form = tk.Frame(izq, bg="white")
-        form.pack(fill="both", expand=True)
+        tk.Label(
+            izquierda,
+            text="Complete los datos para registrar o actualizar un trámite.",
+            bg=BLANCO,
+            fg=GRIS,
+            font=("Segoe UI", 8),
+            wraplength=320,
+            justify="left"
+        ).pack(anchor="w", pady=(0, 9))
+
+        formulario = tk.Frame(izquierda, bg=BLANCO)
+        formulario.pack(fill="both", expand=True)
 
         definiciones = [
             ("solicitante", "Solicitante", None),
@@ -125,12 +268,12 @@ class Ventana:
         ]
 
         for fila, (clave, etiqueta, opciones) in enumerate(definiciones):
-
             tk.Label(
-                form,
+                formulario,
                 text=etiqueta,
-                bg="white",
-                fg="#334e68"
+                bg=BLANCO,
+                fg=TEXTO,
+                font=("Segoe UI", 9)
             ).grid(
                 row=fila,
                 column=0,
@@ -140,45 +283,58 @@ class Ventana:
 
             if opciones:
                 widget = ttk.Combobox(
-                    form,
+                    formulario,
                     values=opciones,
                     state="readonly",
-                    width=22
+                    width=23
                 )
                 widget.set(opciones[0])
 
             elif clave == "observaciones":
                 widget = tk.Text(
-                    form,
-                    width=23,
+                    formulario,
+                    width=24,
                     height=3,
                     wrap="word",
-                    font=("Segoe UI", 9)
+                    font=("Segoe UI", 9),
+                    relief="solid",
+                    borderwidth=1
                 )
 
             else:
-                widget = ttk.Entry(form, width=25)
+                widget = ttk.Entry(
+                    formulario,
+                    width=25
+                )
 
             widget.grid(
                 row=fila,
                 column=1,
                 sticky="ew",
-                padx=(6, 0),
+                padx=(8, 0),
                 pady=4
             )
 
             self.campos[clave] = widget
 
-        form.columnconfigure(1, weight=1)
+        formulario.columnconfigure(1, weight=1)
+
+        separador = tk.Frame(
+            izquierda,
+            bg=VERDE_CLARO,
+            height=2
+        )
+        separador.pack(fill="x", pady=9)
 
         tk.Label(
-            izq,
-            text="Archivo adjunto",
-            bg="white",
-            fg="#334e68"
-        ).pack(anchor="w", pady=(6, 2))
+            izquierda,
+            text="DOCUMENTO ADJUNTO",
+            bg=BLANCO,
+            fg=VERDE_OSCURO,
+            font=("Segoe UI", 9, "bold")
+        ).pack(anchor="w", pady=(0, 5))
 
-        fila_archivo = tk.Frame(izq, bg="white")
+        fila_archivo = tk.Frame(izquierda, bg=BLANCO)
         fila_archivo.pack(fill="x")
 
         self.archivo = tk.StringVar()
@@ -192,51 +348,105 @@ class Ventana:
             fila_archivo,
             text="Elegir",
             command=self.adjuntar
-        ).pack(side="right", padx=(4, 0))
+        ).pack(side="left", padx=(5, 0))
 
-        der = tk.Frame(
+        derecha = tk.Frame(
             cuerpo,
-            bg="white",
-            padx=12,
+            bg=BLANCO,
+            padx=14,
             pady=12
         )
-        der.pack(side="left", fill="both", expand=True)
+        derecha.pack(
+            side="left",
+            fill="both",
+            expand=True
+        )
 
         tk.Label(
-            der,
+            derecha,
             text="REGISTRO Y SEGUIMIENTO",
-            bg="white",
-            fg="#102a43",
-            font=("Segoe UI", 11, "bold")
+            bg=BLANCO,
+            fg=VERDE_OSCURO,
+            font=("Segoe UI", 12, "bold")
         ).pack(anchor="w")
 
         tk.Label(
-            der,
-            text="Buscar por código, solicitante, DNI, asunto, área o estado",
-            bg="white",
-            fg="#334e68"
-        ).pack(anchor="w", pady=(8, 2))
+            derecha,
+            text="Busque expedientes y aplique filtros para localizar trámites.",
+            bg=BLANCO,
+            fg=GRIS,
+            font=("Segoe UI", 9)
+        ).pack(anchor="w", pady=(3, 9))
 
-        buscaf = tk.Frame(der, bg="white")
-        buscaf.pack(fill="x", pady=(0, 8))
+        self.crear_filtros(derecha)
+        self.crear_tabla(derecha)
+
+    def crear_filtros(self, contenedor):
+        fila = tk.Frame(contenedor, bg=BLANCO)
+        fila.pack(fill="x", pady=(0, 10))
 
         self.termino = tk.StringVar()
 
         ttk.Entry(
-            buscaf,
+            fila,
             textvariable=self.termino
-        ).pack(side="left", fill="x", expand=True)
+        ).pack(
+            side="left",
+            fill="x",
+            expand=True,
+            padx=(0, 5)
+        )
 
         self.termino.trace_add(
             "write",
             lambda *args: self.refrescar()
         )
 
+        filtros = [
+            ("estado", ["Todos"] + ESTADOS, 13),
+            ("area", ["Todas"] + AREAS, 13),
+            ("prioridad", ["Todas"] + PRIORIDADES, 12)
+        ]
+
+        for clave, opciones, ancho in filtros:
+            variable = tk.StringVar(value=opciones[0])
+            self.filtros[clave] = variable
+
+            combo = ttk.Combobox(
+                fila,
+                textvariable=variable,
+                values=opciones,
+                state="readonly",
+                width=ancho
+            )
+            combo.pack(side="left", padx=3)
+
+            combo.bind(
+                "<<ComboboxSelected>>",
+                lambda evento: self.refrescar()
+            )
+
         ttk.Button(
-            buscaf,
-            text="Limpiar",
-            command=lambda: self.termino.set("")
-        ).pack(side="left", padx=4)
+            fila,
+            text="Limpiar filtros",
+            command=self.limpiar_filtros
+        ).pack(side="left", padx=(5, 0))
+
+        self.resultado_filtro = tk.StringVar(
+            value="Expedientes registrados"
+        )
+
+        tk.Label(
+            contenedor,
+            textvariable=self.resultado_filtro,
+            bg=BLANCO,
+            fg=GRIS,
+            font=("Segoe UI", 8)
+        ).pack(anchor="w", pady=(0, 5))
+
+    def crear_tabla(self, contenedor):
+        marco = tk.Frame(contenedor, bg=BLANCO)
+        marco.pack(fill="both", expand=True)
 
         self.columnas = (
             "codigo", "fecha", "solicitante", "dni",
@@ -244,9 +454,10 @@ class Ventana:
         )
 
         self.tabla = ttk.Treeview(
-            der,
+            marco,
             columns=self.columnas,
-            show="headings"
+            show="headings",
+            selectmode="browse"
         )
 
         etiquetas = [
@@ -254,7 +465,7 @@ class Ventana:
             "Asunto", "Área", "Prioridad", "Estado"
         ]
 
-        anchos = [85, 120, 145, 80, 200, 105, 90, 105]
+        anchos = [100, 135, 145, 90, 210, 125, 105, 120]
 
         for columna, etiqueta, ancho in zip(
             self.columnas,
@@ -270,17 +481,39 @@ class Ventana:
             self.tabla.column(
                 columna,
                 width=ancho,
-                minwidth=60
+                minwidth=75,
+                anchor="w"
             )
 
+        self.tabla.tag_configure(
+            "Recibido",
+            background="#EAF4EC"
+        )
+        self.tabla.tag_configure(
+            "En_revision",
+            background="#FFF4D9"
+        )
+        self.tabla.tag_configure(
+            "Observado",
+            background="#FCE9E2"
+        )
+        self.tabla.tag_configure(
+            "Finalizado",
+            background="#E4EFE9"
+        )
+        self.tabla.tag_configure(
+            "normal",
+            background=BLANCO
+        )
+
         sy = ttk.Scrollbar(
-            der,
+            marco,
             orient="vertical",
             command=self.tabla.yview
         )
 
         sx = ttk.Scrollbar(
-            der,
+            contenedor,
             orient="horizontal",
             command=self.tabla.xview
         )
@@ -290,7 +523,11 @@ class Ventana:
             xscrollcommand=sx.set
         )
 
-        self.tabla.pack(fill="both", expand=True)
+        self.tabla.pack(
+            side="left",
+            fill="both",
+            expand=True
+        )
         sy.pack(side="right", fill="y")
         sx.pack(fill="x")
 
@@ -299,21 +536,44 @@ class Ventana:
             self.seleccionar
         )
 
+        self.tabla.bind(
+            "<Double-1>",
+            lambda evento: self.editar()
+        )
+
+    def crear_barra_estado(self):
+        barra = tk.Frame(
+            self.raiz,
+            bg=VERDE_OSCURO,
+            height=28
+        )
+        barra.pack(fill="x", side="bottom")
+
         self.mensaje = tk.StringVar(
             value="Sistema local listo"
         )
 
         tk.Label(
-            raiz,
+            barra,
             textvariable=self.mensaje,
-            bg="#d9e2ec",
-            fg="#334e68",
+            bg=VERDE_OSCURO,
+            fg=BLANCO,
             anchor="w",
-            padx=12,
-            pady=5
+            padx=14,
+            pady=5,
+            font=("Segoe UI", 8)
         ).pack(fill="x")
 
-        self.refrescar()
+    def actualizar_indicadores(self):
+        total, estados = resumen()
+
+        self.indicadores["total"].config(text=str(total))
+
+        for estado in ESTADOS:
+            if estado in self.indicadores:
+                self.indicadores[estado].config(
+                    text=str(estados.get(estado, 0))
+                )
 
     def valor(self, clave):
         widget = self.campos[clave]
@@ -334,9 +594,7 @@ class Ventana:
         return datos
 
     def llenar(self, datos):
-
         for clave, widget in self.campos.items():
-
             valor = datos.get(clave, "")
 
             if isinstance(widget, tk.Text):
@@ -354,31 +612,41 @@ class Ventana:
         self.codigo = datos.get("codigo")
 
     def limpiar(self):
-
         self.codigo = None
 
         for clave, widget in self.campos.items():
-
             if isinstance(widget, tk.Text):
                 widget.delete("1.0", "end")
 
             elif isinstance(widget, ttk.Combobox):
-                widget.set(widget["values"][0])
+                valores = widget["values"]
+                widget.set(valores[0] if valores else "")
 
             else:
                 widget.delete(0, "end")
 
         self.archivo.set("")
-        self.tabla.selection_remove(
-            self.tabla.selection()
-        )
+
+        if hasattr(self, "tabla"):
+            seleccion = self.tabla.selection()
+            if seleccion:
+                self.tabla.selection_remove(*seleccion)
 
         self.mensaje.set(
-            "Complete los datos del nuevo expediente."
+            "Formulario preparado para registrar un nuevo expediente."
         )
 
-    def adjuntar(self):
+    def limpiar_filtros(self):
+        self.termino.set("")
 
+        for clave, variable in self.filtros.items():
+            variable.set(
+                "Todos" if clave == "estado" else "Todas"
+            )
+
+        self.refrescar()
+
+    def adjuntar(self):
         ruta = filedialog.askopenfilename(
             title="Seleccionar documento",
             filetypes=[
@@ -393,7 +661,6 @@ class Ventana:
             self.archivo.set(ruta)
 
     def guardar_adjunto(self, ruta):
-
         if not ruta:
             return ""
 
@@ -418,7 +685,6 @@ class Ventana:
         return str(destino.relative_to(BASE))
 
     def obtener_ruta_documento(self, archivo):
-
         if not archivo:
             return None
 
@@ -430,7 +696,6 @@ class Ventana:
         return ruta
 
     def ver_documento(self):
-
         archivo = self.archivo.get().strip()
 
         if not archivo:
@@ -445,14 +710,12 @@ class Ventana:
         if ruta is None or not ruta.exists():
             messagebox.showerror(
                 "Documento no encontrado",
-                "No se encuentra el archivo adjunto.\n\n"
-                "Compruebe su ubicación."
+                "No se encuentra el archivo adjunto."
             )
             return
 
         try:
             os.startfile(str(ruta))
-
         except OSError as error:
             messagebox.showerror(
                 "Error al abrir",
@@ -460,39 +723,38 @@ class Ventana:
             )
 
     def editar(self):
-
         if not self.codigo:
-            messagebox.showwarning(
-                "Editar expediente",
-                "Primero seleccione un expediente de la tabla."
-            )
-            return
+            seleccion = self.tabla.selection()
 
-        messagebox.showinfo(
-            "Editar expediente",
-            f"Está editando el expediente {self.codigo}.\n\n"
-            "Modifique los campos del formulario y pulse Guardar "
-            "para conservar los cambios."
+            if not seleccion:
+                messagebox.showwarning(
+                    "Editar expediente",
+                    "Seleccione primero un expediente de la tabla."
+                )
+                return
+
+        self.mensaje.set(
+            f"Modo de edición: expediente {self.codigo}. "
+            "Modifique los datos y pulse Guardar."
         )
 
     def guardar(self):
-
         datos = self.datos()
 
         try:
-
             if datos["archivo"]:
                 ruta = self.obtener_ruta_documento(datos["archivo"])
 
-                if ruta and ruta.exists():
-                    datos["archivo"] = self.guardar_adjunto(
-                        str(ruta)
+                if ruta is None or not ruta.exists():
+                    raise ValueError(
+                        "El documento adjunto seleccionado no existe."
                     )
+
+                datos["archivo"] = self.guardar_adjunto(str(ruta))
 
             if self.codigo:
                 actualizar(self.codigo, datos)
                 texto = f"Expediente {self.codigo} actualizado."
-
             else:
                 self.codigo = registrar(datos)
                 texto = f"Expediente registrado: {self.codigo}"
@@ -513,7 +775,6 @@ class Ventana:
             )
 
     def borrar(self):
-
         if not self.codigo:
             messagebox.showwarning(
                 "Eliminar",
@@ -522,25 +783,21 @@ class Ventana:
             return
 
         confirmar = messagebox.askyesno(
-            "Confirmar",
-            f"¿Eliminar {self.codigo}?"
+            "Confirmar eliminación",
+            f"¿Está seguro de eliminar el expediente {self.codigo}?"
         )
 
         if confirmar:
-
             try:
                 eliminar(self.codigo)
                 self.limpiar()
                 self.refrescar()
+                self.mensaje.set("Expediente eliminado correctamente.")
 
             except ValueError as error:
-                messagebox.showerror(
-                    "Error",
-                    str(error)
-                )
+                messagebox.showerror("Error", str(error))
 
     def derivar(self):
-
         if not self.codigo:
             messagebox.showwarning(
                 "Seguimiento",
@@ -560,93 +817,131 @@ class Ventana:
             )
 
             self.refrescar()
+            self.mensaje.set(
+                f"Seguimiento actualizado para {self.codigo}."
+            )
 
             messagebox.showinfo(
                 "Seguimiento",
-                "Se actualizó el estado y la asignación."
+                "Se actualizó el estado y la asignación del expediente."
             )
 
         except ValueError as error:
-            messagebox.showerror(
-                "Error",
-                str(error)
-            )
+            messagebox.showerror("Error", str(error))
+
+    def filtrar_registros(self, registros):
+        estado = self.filtros["estado"].get()
+        area = self.filtros["area"].get()
+        prioridad = self.filtros["prioridad"].get()
+
+        if estado != "Todos":
+            registros = [
+                r for r in registros
+                if r.get("estado", "") == estado
+            ]
+
+        if area != "Todas":
+            registros = [
+                r for r in registros
+                if r.get("area_destino", "") == area
+            ]
+
+        if prioridad != "Todas":
+            registros = [
+                r for r in registros
+                if r.get("prioridad", "") == prioridad
+            ]
+
+        return registros
+
+    def clave_orden(self, registro):
+        valor = str(registro.get(self.orden_campo, ""))
+
+        if self.orden_campo == "fecha":
+            try:
+                return datetime.strptime(
+                    valor,
+                    "%d/%m/%Y %H:%M"
+                )
+            except ValueError:
+                return datetime.min
+
+        return valor.casefold()
 
     def refrescar(self):
-
         if not hasattr(self, "tabla"):
             return
 
         for item in self.tabla.get_children():
             self.tabla.delete(item)
 
-        registros = ordenar(
-            buscar(self.termino.get()),
-            "fecha"
+        registros = buscar(self.termino.get())
+        registros = self.filtrar_registros(registros)
+
+        registros.sort(
+            key=self.clave_orden,
+            reverse=self.orden_inverso
         )
 
         for registro in registros:
+            estado = registro.get("estado", "")
+
+            if estado == "En revisión":
+                etiqueta = "En_revision"
+            elif estado in ("Recibido", "Observado", "Finalizado"):
+                etiqueta = estado
+            else:
+                etiqueta = "normal"
+
             self.tabla.insert(
                 "",
                 "end",
                 values=tuple(
                     registro.get(columna, "")
                     for columna in self.columnas
-                )
+                ),
+                tags=(etiqueta,)
             )
 
-        self.mensaje.set(
-            f"{len(registros)} expediente(s) mostrado(s)."
+        self.resultado_filtro.set(
+            f"{len(registros)} expediente(s) encontrado(s)"
         )
 
-    def seleccionar(self, evento=None):
+        self.actualizar_indicadores()
 
+    def seleccionar(self, evento=None):
         seleccion = self.tabla.selection()
 
         if seleccion:
-
-            codigo = self.tabla.item(
+            valores = self.tabla.item(
                 seleccion[0],
                 "values"
-            )[0]
+            )
+
+            codigo = valores[0]
 
             for registro in cargar():
-
-                if registro["codigo"] == codigo:
+                if registro.get("codigo") == codigo:
                     self.llenar(registro)
-
                     self.mensaje.set(
-                        "Expediente seleccionado: " + codigo
+                        f"Expediente seleccionado: {codigo}"
                     )
-
                     break
 
     def ordenar_por(self, campo):
+        if self.orden_campo == campo:
+            self.orden_inverso = not self.orden_inverso
+        else:
+            self.orden_campo = campo
+            self.orden_inverso = False
 
-        for item in self.tabla.get_children():
-            self.tabla.delete(item)
-
-        registros = ordenar(
-            buscar(self.termino.get()),
-            campo
-        )
-
-        for registro in registros:
-            self.tabla.insert(
-                "",
-                "end",
-                values=tuple(
-                    registro.get(columna, "")
-                    for columna in self.columnas
-                )
-            )
+        self.refrescar()
 
     def ver_resumen(self):
-
         total, estados = resumen()
 
         mensaje = (
-            f"Total de expedientes: {total}\n\n"
+            f"TOTAL DE EXPEDIENTES: {total}\n\n"
             + "\n".join(
                 f"{clave}: {valor}"
                 for clave, valor in estados.items()
@@ -654,12 +949,11 @@ class Ventana:
         )
 
         messagebox.showinfo(
-            "Resumen",
+            "Resumen de expedientes",
             mensaje
         )
 
     def exportar_csv(self):
-
         ruta = filedialog.asksaveasfilename(
             defaultextension=".csv",
             filetypes=[("Archivo CSV", "*.csv")],
@@ -667,81 +961,112 @@ class Ventana:
         )
 
         if ruta:
+            try:
+                cantidad = exportar(ruta)
 
-            cantidad = exportar(ruta)
+                messagebox.showinfo(
+                    "Exportación",
+                    f"Se exportaron {cantidad} expedientes."
+                )
 
-            messagebox.showinfo(
-                "Exportación",
-                f"Se exportaron {cantidad} expedientes."
-            )
+            except OSError as error:
+                messagebox.showerror(
+                    "Error de exportación",
+                    str(error)
+                )
+
+
+def centrar_ventana(ventana, ancho, alto):
+    ventana.update_idletasks()
+
+    x = (ventana.winfo_screenwidth() - ancho) // 2
+    y = (ventana.winfo_screenheight() - alto) // 2
+
+    ventana.geometry(f"{ancho}x{alto}+{x}+{y}")
 
 
 def iniciar():
-
     preparar()
 
     raiz = tk.Tk()
     raiz.withdraw()
 
     login = tk.Toplevel(raiz)
-    login.title("Acceso al sistema")
-    login.geometry("360x290")
+    login.title("Acceso | Santa Rita de Casia")
+    login.configure(bg=VERDE_OSCURO)
     login.resizable(False, False)
-    login.configure(bg="#102a43")
+
+    centrar_ventana(login, 420, 370)
+
+    cabecera = tk.Frame(
+        login,
+        bg=VERDE_OSCURO
+    )
+    cabecera.pack(fill="x", pady=(22, 15))
 
     tk.Label(
-        login,
-        text="MESA DE PARTES",
-        bg="#102a43",
-        fg="white",
-        font=("Segoe UI", 18, "bold")
-    ).pack(pady=(22, 4))
+        cabecera,
+        text="SANTA RITA DE CASIA",
+        bg=VERDE_OSCURO,
+        fg=BLANCO,
+        font=("Segoe UI", 19, "bold")
+    ).pack()
 
     tk.Label(
-        login,
-        text="Santa Rita de Casia",
-        bg="#102a43",
-        fg="#d9e2ec"
-    ).pack(pady=(0, 14))
+        cabecera,
+        text="MESA DE PARTES DIGITAL",
+        bg=VERDE_OSCURO,
+        fg="#DCEBDD",
+        font=("Segoe UI", 10)
+    ).pack(pady=(4, 0))
 
     panel = tk.Frame(
         login,
-        bg="white",
-        padx=22,
-        pady=16
+        bg=BLANCO,
+        padx=28,
+        pady=22
     )
-
     panel.pack(
         fill="both",
         expand=True,
-        padx=18,
-        pady=(0, 18)
+        padx=22,
+        pady=(0, 22)
     )
+
+    tk.Label(
+        panel,
+        text="Bienvenido al sistema",
+        bg=BLANCO,
+        fg=VERDE_OSCURO,
+        font=("Segoe UI", 13, "bold")
+    ).pack(anchor="w", pady=(0, 15))
 
     tk.Label(
         panel,
         text="Usuario",
-        bg="white"
+        bg=BLANCO,
+        fg=TEXTO,
+        font=("Segoe UI", 9, "bold")
     ).pack(anchor="w")
 
     usuario = ttk.Entry(panel)
-    usuario.pack(fill="x", pady=(3, 8))
+    usuario.pack(fill="x", pady=(5, 12))
 
     tk.Label(
         panel,
         text="Contraseña",
-        bg="white"
+        bg=BLANCO,
+        fg=TEXTO,
+        font=("Segoe UI", 9, "bold")
     ).pack(anchor="w")
 
     clave = ttk.Entry(
         panel,
         show="*"
     )
-
-    clave.pack(fill="x", pady=(3, 10))
+    clave.pack(fill="x", pady=(5, 17))
 
     def entrar(event=None):
-
         cuenta = autenticar(
             usuario.get().strip(),
             clave.get()
@@ -749,30 +1074,49 @@ def iniciar():
 
         if not cuenta:
             messagebox.showerror(
-                "Acceso",
+                "Acceso denegado",
                 "Usuario o contraseña incorrectos."
             )
+            clave.delete(0, "end")
+            clave.focus_set()
             return
 
         login.destroy()
         raiz.deiconify()
         Ventana(raiz, cuenta)
 
-    ttk.Button(
+    boton = tk.Button(
         panel,
-        text="Ingresar",
-        command=entrar
-    ).pack(fill="x")
+        text="INGRESAR",
+        command=entrar,
+        bg=VERDE,
+        fg=BLANCO,
+        activebackground=VERDE_OSCURO,
+        activeforeground=BLANCO,
+        relief="flat",
+        cursor="hand2",
+        font=("Segoe UI", 10, "bold"),
+        pady=9
+    )
+    boton.pack(fill="x")
 
     tk.Label(
         panel,
-        text="Acceso inicial: admin / admin123",
-        bg="white",
-        fg="#627d98",
+        text="Sistema administrativo institucional",
+        bg=BLANCO,
+        fg=GRIS,
         font=("Segoe UI", 8)
-    ).pack(pady=(7, 0))
+    ).pack(pady=(12, 0))
 
     clave.bind("<Return>", entrar)
+    usuario.bind("<Return>", lambda evento: clave.focus_set())
+
     usuario.focus_set()
 
+    login.protocol("WM_DELETE_WINDOW", raiz.destroy)
+
     raiz.mainloop()
+
+
+if __name__ == "__main__":
+    iniciar()
