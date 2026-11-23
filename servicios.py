@@ -1,4 +1,3 @@
-
 from datetime import datetime
 from persistencia import cargar, guardar_todos
 
@@ -38,7 +37,9 @@ def validar(datos, codigo_actual=""):
     ]
 
     for campo in obligatorios:
-        if not str(datos.get(campo, "")).strip():
+        valor = str(datos.get(campo, "") or "").strip()
+
+        if not valor:
             raise ValueError(
                 "Complete el campo: " + campo.replace("_", " ")
             )
@@ -48,8 +49,28 @@ def validar(datos, codigo_actual=""):
     if len(dni) != 8 or not dni.isdigit():
         raise ValueError("El DNI debe contener exactamente 8 dígitos.")
 
-    if len(datos["asunto"].strip()) < 4:
+    asunto = str(datos["asunto"]).strip()
+
+    if len(asunto) < 4:
         raise ValueError("El asunto debe tener al menos 4 caracteres.")
+
+    opciones = {
+        "tipo_tramite": TIPOS,
+        "area_destino": AREAS,
+        "prioridad": PRIORIDADES,
+        "estado": ESTADOS,
+        "revision": REVISIONES
+    }
+
+    for campo, valores in opciones.items():
+        valor = str(datos.get(campo, "") or "").strip()
+
+        if valor and valor not in valores:
+            raise ValueError(
+                "La opción seleccionada para "
+                + campo.replace("_", " ")
+                + " no es válida."
+            )
 
     for registro in cargar():
         if (
@@ -154,6 +175,12 @@ def ordenar(registros, campo):
 
 
 def seguimiento(codigo, estado, area, responsable, nota):
+    if estado not in ESTADOS:
+        raise ValueError("El estado seleccionado no es válido.")
+
+    if area not in AREAS:
+        raise ValueError("El área seleccionada no es válida.")
+
     registros = cargar()
 
     for registro in registros:
