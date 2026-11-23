@@ -6,6 +6,8 @@ ESTADOS = [
     "En atención", "Respondido", "Finalizado", "Archivado"
 ]
 
+ESTADOS_GESTION = [estado for estado in ESTADOS if estado != "Archivado"]
+
 REVISIONES = [
     "Pendiente",
     "En revisión",
@@ -175,8 +177,11 @@ def ordenar(registros, campo):
 
 
 def seguimiento(codigo, estado, area, responsable, nota):
-    if estado not in ESTADOS:
-        raise ValueError("El estado seleccionado no es válido.")
+    if estado == "Archivado":
+        raise ValueError("Utilice la opci?n Archivar expediente para enviar un tr?mite al archivo institucional.")
+
+    if estado not in ESTADOS_GESTION:
+        raise ValueError("El estado seleccionado no es v?lido.")
 
     if area not in AREAS:
         raise ValueError("El área seleccionada no es válida.")
