@@ -3,6 +3,7 @@ from tkinter import ttk, messagebox
 
 from estudiantes import (
     registrar_estudiante_completo,
+    editar_estudiante_completo,
     obtener_datos_padron
 )
 
@@ -319,6 +320,215 @@ def abrir_estudiante(raiz):
     ventana.grab_set()
 
 
+
+def abrir_edicion_estudiante(raiz, codigo, al_guardar, padre=None):
+    registros = obtener_datos_padron()
+
+    estudiante = next(
+        (
+            e for e in registros
+            if str(e.get("codigo", "")).casefold()
+            == str(codigo).casefold()
+        ),
+        None
+    )
+
+    if not estudiante:
+        messagebox.showerror(
+            "Estudiante no encontrado",
+            "No se encontr? el registro seleccionado."
+        )
+        return
+
+    ventana = tk.Toplevel(padre or raiz)
+    preparar_ventana(
+        ventana,
+        "Editar estudiante y responsables",
+        850,
+        780
+    )
+
+    principal = tk.Frame(ventana, bg=CREMA)
+    principal.pack(fill="both", expand=True)
+
+    canvas = tk.Canvas(principal, bg=CREMA, highlightthickness=0)
+    barra = ttk.Scrollbar(
+        principal, orient="vertical", command=canvas.yview
+    )
+    canvas.configure(yscrollcommand=barra.set)
+
+    barra.pack(side="right", fill="y")
+    canvas.pack(side="left", fill="both", expand=True)
+
+    contenido = tk.Frame(canvas, bg=CREMA)
+    ventana_canvas = canvas.create_window(
+        (0, 0), window=contenido, anchor="nw"
+    )
+
+    contenido.bind(
+        "<Configure>",
+        lambda event: canvas.configure(scrollregion=canvas.bbox("all"))
+    )
+    canvas.bind(
+        "<Configure>",
+        lambda event: canvas.itemconfigure(
+            ventana_canvas, width=event.width
+        )
+    )
+
+    tk.Label(
+        contenido,
+        text="Modifique los datos necesarios y guarde los cambios.",
+        bg=CREMA,
+        fg=GRIS,
+        font=("Segoe UI", 9)
+    ).pack(pady=(12, 3))
+
+    seccion = crear_seccion_formulario(
+        contenido, "DATOS DEL ESTUDIANTE"
+    )
+
+    estudiante_vars = {
+        "codigo": tk.StringVar(value=estudiante.get("codigo", "")),
+        "nombres": tk.StringVar(value=estudiante.get("nombres", "")),
+        "apellidos": tk.StringVar(value=estudiante.get("apellidos", "")),
+        "edad": tk.StringVar(value=str(estudiante.get("edad", ""))),
+        "aula": tk.StringVar(value=estudiante.get("aula", "")),
+        "seccion": tk.StringVar(value=estudiante.get("seccion", ""))
+    }
+
+    crear_campo(
+        seccion, 0, "C?digo del estudiante", estudiante_vars["codigo"]
+    )
+    crear_campo(
+        seccion, 1, "Nombres", estudiante_vars["nombres"]
+    )
+    crear_campo(
+        seccion, 2, "Apellidos", estudiante_vars["apellidos"]
+    )
+
+    campo_edad = crear_campo(
+        seccion, 3, "Edad", estudiante_vars["edad"], ["3", "4", "5"]
+    )
+
+    campo_aula = crear_campo(
+        seccion, 4, "Aula asignada autom?ticamente",
+        estudiante_vars["aula"]
+    )
+    campo_aula.configure(state="disabled")
+
+    crear_campo(
+        seccion, 5, "Secci?n", estudiante_vars["seccion"]
+    )
+
+    def actualizar_aula(event=None):
+        aulas = {
+            "3": "Aula azul",
+            "4": "Aula amarilla",
+            "5": "Aula verde"
+        }
+        estudiante_vars["aula"].set(
+            aulas.get(estudiante_vars["edad"].get(), "")
+        )
+
+    campo_edad.bind("<<ComboboxSelected>>", actualizar_aula)
+
+    apoderado_vars = crear_responsable(
+        contenido, "APODERADO (OBLIGATORIO)", "apoderado"
+    )
+
+    tutor_vars = crear_responsable(
+        contenido, "TUTOR (OPCIONAL)", "tutor", opcional=True
+    )
+
+    apoderado = estudiante.get("apoderado", {})
+    tutor = estudiante.get("tutor", {})
+
+    for clave, variable in apoderado_vars.items():
+        variable.set(apoderado.get(clave, ""))
+
+    apoderado_vars["parentesco"].set(
+        estudiante.get("apoderado_parentesco", "")
+    )
+
+    for clave, variable in tutor_vars.items():
+        variable.set(tutor.get(clave, ""))
+
+    tutor_vars["parentesco"].set(
+        estudiante.get("tutor_parentesco", "")
+    )
+
+    tk.Label(
+        contenido,
+        text="El apoderado es obligatorio. Si no tiene tutor, "
+             "deje vac?os todos los campos de esa secci?n.",
+        bg=CREMA,
+        fg=GRIS,
+        font=("Segoe UI", 9, "italic"),
+        wraplength=700
+    ).pack(pady=7)
+
+    def guardar_cambios():
+        datos_estudiante = {
+            clave: variable.get().strip()
+            for clave, variable in estudiante_vars.items()
+        }
+
+        datos_apoderado = {
+            clave: variable.get().strip()
+            for clave, variable in apoderado_vars.items()
+        }
+
+        datos_tutor = {
+            clave: variable.get().strip()
+            for clave, variable in tutor_vars.items()
+        }
+
+        try:
+            actualizado = editar_estudiante_completo(
+                codigo,
+                datos_estudiante,
+                datos_apoderado,
+                datos_tutor
+            )
+
+            messagebox.showinfo(
+                "Actualizaci?n exitosa",
+                "Los datos se actualizaron correctamente.\n\n"
+                f"Estudiante: {actualizado['nombres']} "
+                f"{actualizado['apellidos']}\n"
+                f"Aula: {actualizado['aula']}\n"
+                f"Secci?n: {actualizado['seccion']}",
+                parent=ventana
+            )
+
+            ventana.destroy()
+            al_guardar()
+
+        except ValueError as error:
+            messagebox.showerror(
+                "No se pudo actualizar",
+                str(error),
+                parent=ventana
+            )
+
+    tk.Button(
+        contenido,
+        text="GUARDAR CAMBIOS",
+        command=guardar_cambios,
+        bg=VERDE,
+        fg=BLANCO,
+        activebackground=VERDE_OSCURO,
+        activeforeground=BLANCO,
+        relief="flat",
+        cursor="hand2",
+        font=("Segoe UI", 10, "bold"),
+        pady=12
+    ).pack(fill="x", padx=25, pady=18)
+
+    ventana.transient(padre or raiz)
+    ventana.grab_set()
+
 def abrir_padron(raiz):
     ventana = tk.Toplevel(raiz)
     preparar_ventana(
@@ -338,8 +548,8 @@ def abrir_padron(raiz):
         font=("Segoe UI", 9)
     ).pack(fill="x", padx=15, pady=10)
 
-    pestañas = ttk.Notebook(ventana)
-    pestañas.pack(fill="both", expand=True, padx=12, pady=10)
+    pestanas = ttk.Notebook(ventana)
+    pestanas.pack(fill="both", expand=True, padx=12, pady=10)
 
     columnas = [
         "codigo", "nombres", "apellidos", "edad", "seccion",
@@ -378,9 +588,48 @@ def abrir_padron(raiz):
     datos = obtener_datos_padron()
     tablas = {}
 
+    def editar_seleccionado():
+        nombre_aula = pestanas.tab(pestanas.select(), "text")
+        tabla = tablas[nombre_aula]
+        seleccion = tabla.selection()
+
+        if not seleccion:
+            messagebox.showwarning(
+                "Seleccione un estudiante",
+                "Seleccione un estudiante de la lista para editar.",
+                parent=ventana
+            )
+            return
+
+        valores = tabla.item(seleccion[0], "values")
+        codigo = valores[0]
+
+        def refrescar_lista():
+            ventana.destroy()
+            abrir_padron(raiz)
+
+        abrir_edicion_estudiante(
+            raiz, codigo, refrescar_lista, ventana
+        )
+
+    tk.Button(
+        ventana,
+        text="EDITAR ESTUDIANTE SELECCIONADO",
+        command=editar_seleccionado,
+        bg=VERDE,
+        fg=BLANCO,
+        activebackground=VERDE_OSCURO,
+        activeforeground=BLANCO,
+        relief="flat",
+        cursor="hand2",
+        font=("Segoe UI", 9, "bold"),
+        padx=15,
+        pady=9
+    ).pack(anchor="e", padx=15, pady=(0, 8))
+
     for nombre_aula, edad in aulas:
-        pagina = tk.Frame(pestañas, bg=BLANCO)
-        pestañas.add(pagina, text=nombre_aula)
+        pagina = tk.Frame(pestanas, bg=BLANCO)
+        pestanas.add(pagina, text=nombre_aula)
 
         registros = [
             estudiante for estudiante in datos

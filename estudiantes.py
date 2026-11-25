@@ -328,3 +328,107 @@ def obtener_datos_padron():
             e.get("nombres", "").casefold()
         )
     )
+
+def editar_estudiante_completo(codigo_original, datos_estudiante, datos_apoderado, datos_tutor=None):
+    estudiante_validado = validar_estudiante(datos_estudiante)
+
+    apoderado, parentesco_apoderado = validar_responsable(
+        datos_apoderado, "apoderado"
+    )
+
+    tutor_validado = validar_tutor_opcional(datos_tutor or {})
+
+    estudiantes = cargar_estudiantes()
+    personas = cargar_apoderados()
+
+    estudiante = next(
+        (
+            e for e in estudiantes
+            if normalizar(e.get("codigo")).casefold()
+            == normalizar(codigo_original).casefold()
+        ),
+        None
+    )
+
+    if not estudiante:
+        raise ValueError("No se encontr? el estudiante que desea editar.")
+
+    nuevo_codigo = estudiante_validado["codigo"]
+
+    if any(
+        normalizar(e.get("codigo")).casefold() == nuevo_codigo.casefold()
+        and e is not estudiante
+        for e in estudiantes
+    ):
+        raise ValueError("Ya existe otro estudiante con ese c?digo.")
+
+    dni_antiguos = {
+        normalizar(estudiante.get("apoderado_dni")),
+        normalizar(estudiante.get("tutor_dni"))
+    }
+
+    dni_antiguos.discard("")
+
+    def obtener_persona(datos):
+        existente = next(
+            (p for p in personas if normalizar(p.get("dni")) == datos["dni"]),
+            None
+        )
+
+        if existente:
+            campos = ("nombres", "apellidos", "telefono", "correo")
+
+            if datos["dni"] in dni_antiguos:
+                existente.update(datos)
+            elif any(
+                normalizar(existente.get(campo)) != datos[campo]
+                for campo in campos
+            ):
+                raise ValueError(
+                    f"El DNI {datos['dni']} ya est? registrado con otros datos."
+                )
+
+            return existente
+
+        nueva = dict(datos)
+        nueva["estudiantes"] = []
+        nueva["fecha_registro"] = datetime.now().strftime("%d/%m/%Y %H:%M")
+        personas.append(nueva)
+
+        return nueva
+
+    persona_apoderado = obtener_persona(apoderado)
+
+    persona_tutor = None
+    parentesco_tutor = ""
+
+    if tutor_validado:
+        tutor, parentesco_tutor = tutor_validado
+        persona_tutor = obtener_persona(tutor)
+
+    for persona in personas:
+        relacionados = persona.setdefault("estudiantes", [])
+        persona["estudiantes"] = [
+            codigo for codigo in relacionados
+            if normalizar(codigo).casefold()
+            != normalizar(codigo_original).casefold()
+        ]
+
+    for persona in (persona_apoderado, persona_tutor):
+        if persona and nuevo_codigo not in persona["estudiantes"]:
+            persona["estudiantes"].append(nuevo_codigo)
+
+    estudiante.update(estudiante_validado)
+
+    estudiante.update({
+        "apoderado_dni": apoderado["dni"],
+        "apoderado_parentesco": parentesco_apoderado,
+        "tutor_dni": tutor_validado[0]["dni"] if tutor_validado else "",
+        "tutor_parentesco": parentesco_tutor,
+        "fecha_actualizacion": datetime.now().strftime("%d/%m/%Y %H:%M")
+    })
+
+    guardar_apoderados(personas)
+    guardar_estudiantes(estudiantes)
+
+    return estudiante
