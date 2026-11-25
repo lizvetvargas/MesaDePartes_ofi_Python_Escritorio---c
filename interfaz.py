@@ -10,6 +10,7 @@ from tkinter import ttk, messagebox, filedialog
 from persistencia import preparar, autenticar, cargar
 from configuracion import BASE, ADJUNTOS
 from ventana_archivo import abrir_archivo
+from ventana_registros import abrir_estudiante, abrir_padron
 from archivo import archivar
 
 from servicios import (
@@ -154,7 +155,9 @@ class Ventana:
             ("Archivar expediente", self.archivar_expediente),
             ("Resumen", self.ver_resumen),
             ("Exportar CSV", self.exportar_csv),
-            ("Archivo institucional", lambda: abrir_archivo(self.raiz))
+            ("Archivo institucional", lambda: abrir_archivo(self.raiz)),
+            ("Registrar estudiante", lambda: abrir_estudiante(self.raiz)),
+            ("Lista de estudiantes", lambda: abrir_padron(self.raiz))
         ]
 
         for nombre, funcion in acciones:
